@@ -1,0 +1,74 @@
+[
+  {
+    "id": "manusia",
+    "nama": "Manusia",
+    "deskripsi": "Ras yang paling adaptif dan tersebar luas di seluruh dunia.",
+    "bonus_stat": { "str": 2, "agi": 2, "int": 2, "def": 2, "luck": 2 },
+    "skill_bawaan": ["Adaptability", "Willpower"],
+    "element_cocok": ["Semua"],
+    "lore": "Manusia tidak memiliki umur panjang seperti Elf, namun semangat mereka membara."
+  },
+  {
+    "id": "elf_malam",
+    "nama": "Elf Malam",
+    "deskripsi": "Makhluk ramping penghuni hutan gelap, tajam indera dan lihai sihir gelap.",
+    "bonus_stat": { "agi": 5, "int": 3, "def": -1, "str": 0, "luck": 0 },
+    "skill_bawaan": ["Night Vision", "Shadow Affinity"],
+    "element_cocok": ["Kegelapan", "Angin"],
+    "lore": "Dulunya bangsa Elf Siang, mereka terkutuk saat berkhianat pada Dewa Fajar..."
+  },
+  {
+    "id": "elf_tinggi",
+    "nama": "High Elf",
+    "deskripsi": "Bangsa Elf yang anggun dan menguasai sihir murni dengan sempurna.",
+    "bonus_stat": { "agi": 3, "int": 5, "def": 0, "str": -1, "luck": 1 },
+    "skill_bawaan": ["Mana Flow", "Nature's Blessing"],
+    "element_cocok": ["Cahaya", "Air", "Alam"],
+    "lore": "Penjaga hutan kuno yang hidup abadi dan bijaksana."
+  },
+  {
+    "id": "kurcaci",
+    "nama": "Kurcaci",
+    "deskripsi": "Penghuni pegunungan yang tangguh, ahli pandai besi dan pertarungan jarak dekat.",
+    "bonus_stat": { "str": 4, "def": 5, "agi": -2, "int": 0, "luck": 1 },
+    "skill_bawaan": ["Stone Skin", "Master Smith"],
+    "element_cocok": ["Bumi", "Api"],
+    "lore": "Mereka memahat kota-kota megah di dalam perut bumi."
+  },
+  {
+    "id": "orc",
+    "nama": "Orc",
+    "deskripsi": "Prajurit buas dengan kekuatan fisik dan daya tahan yang luar biasa.",
+    "bonus_stat": { "str": 6, "def": 3, "agi": 1, "int": -3, "luck": 0 },
+    "skill_bawaan": ["Bloodlust", "Thick Hide"],
+    "element_cocok": ["Api", "Bumi"],
+    "lore": "Suku petarung yang mengagungkan kekuatan di atas segalanya."
+  },
+  {
+    "id": "beastman",
+    "nama": "Beastman",
+    "deskripsi": "Manusia setengah hewan dengan insting predator dan kecepatan kilat.",
+    "bonus_stat": { "str": 3, "def": 1, "agi": 6, "int": -1, "luck": 1 },
+    "skill_bawaan": ["Feral Instinct", "Predator Dash"],
+    "element_cocok": ["Angin", "Alam"],
+    "lore": "Penghuni padang rumput yang hidup berdampingan dengan alam liar."
+  },
+  {
+    "id": "demon",
+    "nama": "Demon",
+    "deskripsi": "Entitas dari dunia bawah dengan kekuatan sihir penghancur.",
+    "bonus_stat": { "str": 2, "def": 1, "agi": 2, "int": 6, "luck": -2 },
+    "skill_bawaan": ["Demonic Aura", "Soul Drain"],
+    "element_cocok": ["Kegelapan", "Api"],
+    "lore": "Makhluk yang ditakuti karena kekuatan destruktif mereka."
+  },
+  {
+    "id": "celestial",
+    "nama": "Celestial",
+    "deskripsi": "Makhluk suci yang diberkati oleh para dewa.",
+    "bonus_stat": { "str": 1, "def": 2, "agi": 2, "int": 4, "luck": 5 },
+    "skill_bawaan": ["Divine Grace", "Purification"],
+    "element_cocok": ["Cahaya", "Air"],
+    "lore": "Utusan langit yang turun untuk menjaga keseimbangan dunia."
+  }
+]

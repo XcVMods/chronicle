@@ -1,0 +1,24 @@
+[
+  {
+    "id": "kota_awal",
+    "nama": "Kota Awal Oakhaven",
+    "deskripsi": "Kota kecil yang damai, tempat para petualang baru memulai perjalanan mereka.",
+    "bahaya_level": 1,
+    "monster_spawn": ["Slime Hijau", "Tikus Raksasa"],
+    "npc": ["Kepala Desa", "Pemilik Kedai", "Pandai Besi Pemula"],
+    "item_langka": ["Pedang Karat Bersejarah"],
+    "lore": "Oakhaven didirikan oleh pahlawan legendaris yang pensiun dari petualangannya.",
+    "event_khusus": ["Festival Panen (setiap 10 hari)"]
+  },
+  {
+    "id": "hutan_mistis_eldaryn",
+    "nama": "Hutan Mistis Eldaryn",
+    "deskripsi": "Hutan kuno berusia ribuan tahun, pohon-pohonnya berbisik rahasia purba.",
+    "bahaya_level": 3,
+    "monster_spawn": ["Serigala Bayangan", "Peri Jahat", "Naga Kecil Hijau"],
+    "npc": ["Penjaga Hutan Tua Erian", "Pedagang Herbal Misterius"],
+    "item_langka": ["Daun Abadi", "Biji Cahaya Bulan"],
+    "lore": "Konon dulu tempat ini adalah istana Ratu Elf Pertama sebelum dikutuk...",
+    "event_khusus": ["Bulan Darah (setiap 30 hari)", "Badai Sihir Acak"]
+  }
+]

@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a player account and their character data.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "username": { "type": "string", "description": "Unique username" },
+        "display_name": { "type": "string", "description": "Display name for roleplay" },
+        "character": {
+          "type": "object",
+          "properties": {
+            "ras": { "type": "string" },
+            "class": { "type": "string" },
+            "element": { "type": "string" },
+            "level": { "type": "number" },
+            "exp": { "type": "number" },
+            "hp": { "type": "number" },
+            "max_hp": { "type": "number" },
+            "mp": { "type": "number" },
+            "max_mp": { "type": "number" },
+            "stats": {
+              "type": "object",
+              "properties": {
+                "str": { "type": "number" },
+                "agi": { "type": "number" },
+                "int": { "type": "number" },
+                "def": { "type": "number" },
+                "luck": { "type": "number" }
+              }
+            },
+            "skills": { "type": "array", "items": { "type": "string" } },
+            "inventory": { "type": "array", "items": { "type": "string" } },
+            "location": { "type": "string" },
+            "title": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "display_name", "character", "createdAt"]
+    },
+    "StoryEntry": {
+      "title": "StoryEntry",
+      "description": "An entry in the World Story.",
+      "type": "object",
+      "properties": {
+        "entry_id": { "type": "string" },
+        "tanggal_in_game": { "type": "string" },
+        "author_uid": { "type": "string" },
+        "author_username": { "type": "string" },
+        "display_name": { "type": "string" },
+        "lokasi": { "type": "string" },
+        "judul": { "type": "string" },
+        "isi_asli_player": { "type": "string" },
+        "isi_diperkaya_gm": { "type": "string" },
+        "dampak_dunia": { "type": "string" },
+        "tag": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["entry_id", "author_uid", "author_username", "display_name", "lokasi", "isi_asli_player", "isi_diperkaya_gm", "createdAt"]
+    },
+    "GameEvent": {
+      "title": "GameEvent",
+      "description": "A global or local RNG event.",
+      "type": "object",
+      "properties": {
+        "event_id": { "type": "string" },
+        "tier": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["event_id", "tier", "title", "description", "active", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores player profiles and characters. Document ID is the Firebase Auth UID."
+    },
+    "stories/{storyId}": {
+      "schema": { "$ref": "#/entities/StoryEntry" },
+      "description": "Stores all world story entries."
+    },
+    "events/{eventId}": {
+      "schema": { "$ref": "#/entities/GameEvent" },
+      "description": "Stores active and past game events."
+    }
+  }
+}

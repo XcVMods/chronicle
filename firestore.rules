@@ -1,0 +1,154 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: Firebase Auth UID
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - username: string (required, < 20 chars) - Unique username
+    //   - display_name: string (required, < 50 chars) - Display name for roleplay
+    //   - character: map (required) - Character stats and info
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: stories
+    // Document ID: Auto-generated
+    // Fields:
+    //   - entry_id: string (required)
+    //   - author_uid: string (required, immutable)
+    //   - author_username: string (required)
+    //   - display_name: string (required)
+    //   - lokasi: string (required)
+    //   - judul: string (optional)
+    //   - isi_asli_player: string (required, < 5000 chars)
+    //   - isi_diperkaya_gm: string (required, < 5000 chars)
+    //   - dampak_dunia: string (optional)
+    //   - tag: list of strings (optional)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: events
+    // Document ID: Auto-generated
+    // Fields:
+    //   - event_id: string (required)
+    //   - tier: string (required)
+    //   - title: string (required)
+    //   - description: string (required, < 5000 chars)
+    //   - location: string (optional)
+    //   - active: boolean (required)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+    
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidUser() {
+      return hasRequiredFields(['uid', 'username', 'display_name', 'createdAt']) &&
+             validStringLength('username', 3, 20) &&
+             validStringLength('display_name', 3, 50) &&
+             (!('character' in request.resource.data) || request.resource.data.character is map) &&
+             request.resource.data.createdAt is timestamp;
+    }
+    
+    function isValidStory() {
+      return hasRequiredFields(['entry_id', 'author_uid', 'author_username', 'display_name', 'lokasi', 'isi_asli_player', 'isi_diperkaya_gm', 'createdAt']) &&
+             request.resource.data.author_uid == request.auth.uid &&
+             validStringLength('isi_asli_player', 1, 5000) &&
+             validStringLength('isi_diperkaya_gm', 1, 5000) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidEvent() {
+      return hasRequiredFields(['event_id', 'tier', 'title', 'description', 'active', 'createdAt']) &&
+             validStringLength('title', 1, 100) &&
+             validStringLength('description', 1, 5000) &&
+             request.resource.data.active is bool &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (needed for multiplayer)
+      allow read: if isAuthenticated();
+      
+      // Users can only create their own profile
+      allow create: if isOwner(userId) && isValidUser() && uidUnchanged();
+      
+      // Users can only update their own profile
+      allow update: if isOwner(userId) && isValidUser() && uidNotModified() &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /stories/{storyId} {
+      // Anyone authenticated can read stories
+      allow read: if isAuthenticated();
+      
+      // Anyone authenticated can create a story, but author_uid must be their own
+      allow create: if isAuthenticated() && isValidStory();
+      
+      // Stories are immutable once created (for this MVP)
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /events/{eventId} {
+      // Anyone authenticated can read events
+      allow read: if isAuthenticated();
+      
+      // For MVP, any authenticated user (via GM AI) can create events
+      allow create: if isAuthenticated() && isValidEvent();
+      
+      // Only active status can be updated
+      allow update: if isAuthenticated() && isValidEvent() &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    request.resource.data.event_id == resource.data.event_id;
+    }
+
+    match /world_state/{docId} {
+      // Anyone authenticated can read world state
+      allow read: if isAuthenticated();
+      
+      // For MVP, any authenticated user (via GM AI) can update world state
+      allow write: if isAuthenticated();
+    }
+  }
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "slime_hijau",
+    "nama": "Slime Hijau",
+    "tier": "Biasa",
+    "element": "Air",
+    "hp": 50,
+    "attack": 10,
+    "defense": 5,
+    "kelemahan": ["Api", "Petir"],
+    "kekebalan": ["Air"],
+    "bisa_dijadikan_peliharaan": true,
+    "syarat_taming": "Level 1+, HP Slime < 50%",
+    "drop_item": ["Lendir Slime", "Koin Tembaga"],
+    "lore": "Makhluk lemah yang sering ditemukan di sekitar sumber air."
+  },
+  {
+    "id": "naga_merah",
+    "nama": "Naga Api Merah",
+    "tier": "Boss",
+    "element": "Api",
+    "hp": 8500,
+    "attack": 480,
+    "defense": 220,
+    "kelemahan": ["Air", "Es"],
+    "kekebalan": ["Api", "Racun"],
+    "bisa_dijadikan_peliharaan": true,
+    "syarat_taming": "Level 35+, Skill Tamer, HP Naga < 15%",
+    "drop_item": ["Sisik Naga Api", "Inti Kristal Merah", "Fang of Inferno"],
+    "lore": "Naga tertua yang mendiami Gunung Abisal, dipuja suku manusia purba..."
+  }
+]

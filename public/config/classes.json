@@ -1,0 +1,72 @@
+[
+  {
+    "id": "warrior",
+    "nama": "Warrior",
+    "deskripsi": "Petarung garis depan yang mengandalkan kekuatan fisik dan ketahanan.",
+    "stat_utama": ["str", "def"],
+    "skill_list": ["Power Strike", "Shield Bash", "Battle Cry"],
+    "kelemahan": ["Mage", "Necromancer"],
+    "kelebihan_vs": ["Assassin", "Archer"],
+    "evolusi": { "level_20": "Gladiator", "level_40": "Warlord" }
+  },
+  {
+    "id": "mage",
+    "nama": "Mage",
+    "deskripsi": "Pengguna sihir yang mampu memanipulasi elemen untuk menghancurkan musuh.",
+    "stat_utama": ["int"],
+    "skill_list": ["Fireball", "Ice Shield", "Mana Surge"],
+    "kelemahan": ["Assassin", "Archer"],
+    "kelebihan_vs": ["Warrior", "Paladin"],
+    "evolusi": { "level_20": "Sorcerer", "level_40": "Archmage" }
+  },
+  {
+    "id": "assassin",
+    "nama": "Assassin",
+    "deskripsi": "Pembunuh bayaran yang bergerak cepat dan mematikan.",
+    "stat_utama": ["agi", "luck"],
+    "skill_list": ["Shadow Step", "Poison Blade", "Backstab"],
+    "kelemahan": ["Warrior", "Paladin"],
+    "kelebihan_vs": ["Mage", "Cleric"],
+    "evolusi": { "level_20": "Nightblade", "level_40": "Shadowmaster" }
+  },
+  {
+    "id": "paladin",
+    "nama": "Paladin",
+    "deskripsi": "Ksatria suci pelindung yang terkuat saat membela yang lemah.",
+    "stat_utama": ["str", "def"],
+    "skill_list": ["Holy Shield", "Divine Strike", "Aura of Protection", "Resurrection"],
+    "kelemahan": ["Mage", "Necromancer"],
+    "kelebihan_vs": ["Assassin", "Necromancer"],
+    "evolusi": { "level_20": "Holy Crusader", "level_40": "Seraph Knight" }
+  },
+  {
+    "id": "archer",
+    "nama": "Archer",
+    "deskripsi": "Penembak jitu dari jarak jauh yang lincah.",
+    "stat_utama": ["agi", "str"],
+    "skill_list": ["Piercing Arrow", "Volley", "Eagle Eye"],
+    "kelemahan": ["Warrior", "Assassin"],
+    "kelebihan_vs": ["Mage", "Necromancer"],
+    "evolusi": { "level_20": "Ranger", "level_40": "Sniper" }
+  },
+  {
+    "id": "necromancer",
+    "nama": "Necromancer",
+    "deskripsi": "Pengendali mayat hidup dan sihir kutukan.",
+    "stat_utama": ["int", "luck"],
+    "skill_list": ["Raise Dead", "Death Curse", "Life Drain"],
+    "kelemahan": ["Paladin", "Cleric"],
+    "kelebihan_vs": ["Warrior", "Archer"],
+    "evolusi": { "level_20": "Lich", "level_40": "Death Lord" }
+  },
+  {
+    "id": "cleric",
+    "nama": "Cleric",
+    "deskripsi": "Penyembuh dan pendukung tim dengan sihir suci.",
+    "stat_utama": ["int", "def"],
+    "skill_list": ["Heal", "Purify", "Blessing"],
+    "kelemahan": ["Assassin", "Warrior"],
+    "kelebihan_vs": ["Necromancer", "Mage"],
+    "evolusi": { "level_20": "Priest", "level_40": "High Bishop" }
+  }
+]

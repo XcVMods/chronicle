@@ -1,0 +1,74 @@
+[
+  {
+    "id": "api",
+    "nama": "Api",
+    "kuat_vs": ["Angin", "Alam"],
+    "lemah_vs": ["Air", "Bumi"],
+    "netral_vs": ["Petir", "Cahaya", "Kegelapan", "Es"],
+    "efek_khusus": "Bisa membakar lingkungan (hutan, kain, kayu) dan memberikan Damage over Time."
+  },
+  {
+    "id": "air",
+    "nama": "Air",
+    "kuat_vs": ["Api", "Bumi"],
+    "lemah_vs": ["Petir", "Alam"],
+    "netral_vs": ["Angin", "Cahaya", "Kegelapan", "Es"],
+    "efek_khusus": "Dapat menyembuhkan luka ringan dan memadamkan api."
+  },
+  {
+    "id": "angin",
+    "nama": "Angin",
+    "kuat_vs": ["Bumi", "Petir"],
+    "lemah_vs": ["Api", "Es"],
+    "netral_vs": ["Air", "Cahaya", "Kegelapan", "Alam"],
+    "efek_khusus": "Meningkatkan kecepatan dan peluang menghindar."
+  },
+  {
+    "id": "bumi",
+    "nama": "Bumi",
+    "kuat_vs": ["Petir", "Api"],
+    "lemah_vs": ["Angin", "Air"],
+    "netral_vs": ["Alam", "Cahaya", "Kegelapan", "Es"],
+    "efek_khusus": "Pertahanan absolut, dapat memblokir serangan fisik dengan mudah."
+  },
+  {
+    "id": "petir",
+    "nama": "Petir",
+    "kuat_vs": ["Air", "Es"],
+    "lemah_vs": ["Bumi", "Angin"],
+    "netral_vs": ["Api", "Cahaya", "Kegelapan", "Alam"],
+    "efek_khusus": "Menyebabkan kelumpuhan (Stun) pada musuh."
+  },
+  {
+    "id": "alam",
+    "nama": "Alam (Kayu)",
+    "kuat_vs": ["Air", "Petir"],
+    "lemah_vs": ["Api", "Es"],
+    "netral_vs": ["Bumi", "Angin", "Cahaya", "Kegelapan"],
+    "efek_khusus": "Menyerap HP musuh dan menggunakan akar untuk mengikat."
+  },
+  {
+    "id": "es",
+    "nama": "Es",
+    "kuat_vs": ["Angin", "Alam"],
+    "lemah_vs": ["Api", "Petir"],
+    "netral_vs": ["Air", "Bumi", "Cahaya", "Kegelapan"],
+    "efek_khusus": "Memperlambat gerakan musuh dan membekukan target."
+  },
+  {
+    "id": "cahaya",
+    "nama": "Cahaya",
+    "kuat_vs": ["Kegelapan"],
+    "lemah_vs": ["Kegelapan"],
+    "netral_vs": ["Api", "Air", "Angin", "Bumi", "Petir", "Alam", "Es"],
+    "efek_khusus": "Menyucikan debuff dan sangat efektif melawan Undead/Demon."
+  },
+  {
+    "id": "kegelapan",
+    "nama": "Kegelapan",
+    "kuat_vs": ["Cahaya"],
+    "lemah_vs": ["Cahaya"],
+    "netral_vs": ["Api", "Air", "Angin", "Bumi", "Petir", "Alam", "Es"],
+    "efek_khusus": "Mengurangi pandangan/akurasi musuh dan menyerap jiwa."
+  }
+]
