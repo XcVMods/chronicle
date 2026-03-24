@@ -292,7 +292,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
         rank: newRank,
         title: newTitle,
         titles: newTitlesList,
-        guild: gmResponse.mekanik.guild_joined || character.guild,
+        guild: gmResponse.mekanik.guild_joined || character.guild || null,
         inventory: finalInventory
       };
 

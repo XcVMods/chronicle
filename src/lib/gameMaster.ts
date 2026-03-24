@@ -10,12 +10,16 @@ export async function processPlayerAction(
   // Use GEMINI_API_KEY as primary, fallback to API_KEY
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
   
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
-    console.error("Gemini API Key is missing or invalid in environment.");
-    throw new Error("Game Master configuration error: API Key missing or invalid. Please check your settings.");
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey.length < 10) {
+    console.error("Gemini API Key is missing, invalid, or too short.");
+    throw new Error("API Key tidak valid atau belum diset di Settings. Pastikan Anda telah memasukkan API Key Gemini yang benar.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
+
+  // Truncate context to prevent token limit errors
+  const truncatedRecentStories = JSON.stringify(recentStories, null, 2).slice(0, 5000);
+  const truncatedWorldState = JSON.stringify(worldState, null, 2).slice(0, 2000);
 
   const systemInstruction = `You are the AI Game Master for "World Chronicle", a text-based multiplayer RPG.
 Your job is to validate the player's action, enrich the narrative, determine mechanical outcomes, and describe the world's reaction.
@@ -26,10 +30,10 @@ Respond ONLY with a JSON object matching the provided schema. Do not include mar
 ${JSON.stringify(playerData, null, 2)}
 
 ### World State (Quests & Merchant Stock):
-${JSON.stringify(worldState, null, 2)}
+${truncatedWorldState}
 
 ### Recent World Events/Stories (Context):
-${JSON.stringify(recentStories, null, 2)}
+${truncatedRecentStories}
 
 ### Player Action:
 "${playerAction}"
@@ -71,7 +75,7 @@ ${JSON.stringify(recentStories, null, 2)}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview', // Upgraded to Pro for subscriber-level reasoning
+      model: 'gemini-3.1-flash-lite-preview', // Most cost-effective model for high-frequency RPG actions
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         systemInstruction,
