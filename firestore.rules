@@ -160,6 +160,13 @@ service cloud.firestore {
                     request.resource.data.event_id == resource.data.event_id;
     }
 
+    match /parties/{partyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
     match /world_state/{docId} {
       // Anyone authenticated can read world state
       allow read: if isAuthenticated();

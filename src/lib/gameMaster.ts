@@ -10,8 +10,8 @@ export async function processPlayerAction(
   // Use GEMINI_API_KEY as primary, fallback to VITE_GEMINI_API_KEY, import.meta.env.GEMINI_API_KEY, or API_KEY
   const apiKey = 
     process.env.GEMINI_API_KEY || 
-    (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) || 
-    (import.meta.env && import.meta.env.GEMINI_API_KEY) ||
+    process.env.VITE_GEMINI_API_KEY || 
+    process.env.GEMINI_API_KEY ||
     process.env.API_KEY;
   
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey.length < 10) {
@@ -28,6 +28,8 @@ export async function processPlayerAction(
   const systemInstruction = `You are the AI Game Master for "World Chronicle", a text-based multiplayer RPG.
 Your job is to validate the player's action, enrich the narrative, determine mechanical outcomes, and describe the world's reaction.
 
+**CRITICAL LANGUAGE RULE**: You MUST write the \`narasi\` (narrative), \`dunia_bereaksi\` (world reaction), and \`pilihan_selanjutnya\` (next options) entirely in Indonesian (Bahasa Indonesia). However, you MUST keep all RPG and fantasy terminology in English (e.g., Guild, Quest, Rank, HP, MP, Skill, Cooldown, Element, Warrior, Mage, Slime, Demon, etc.).
+
 ### Taming System:
 1. Players can tame monsters (e.g., Slime Hijau, Naga Kecil Hijau).
 2. Taming requires a successful action (e.g., feeding, showing strength, using special items).
@@ -35,14 +37,31 @@ Your job is to validate the player's action, enrich the narrative, determine mec
 4. Pets have stats (HP, STR, AGI, INT) and can be sent on missions or assist in combat.
 5. If a pet assists in combat, calculate its contribution based on its stats.
 
-### Trading System:
-1. Players can trade items or pets with other players.
-2. A player initiates a trade by stating "I want to trade [item/pet] with [Player Name]".
-3. The Game Master validates if both players are in the same location.
-4. If valid, the Game Master creates a trade proposal.
-5. The other player must accept the trade.
-6. Upon acceptance, the Game Master updates both players' inventories/pets.
-7. If a trade is executed, use 'trade_executed' in the response to signal the inventory/pet update.
+### Combat System:
+1. Players can use skills with cooldowns and mana costs.
+2. Status effects include stun, poison, burn, buffs, and debuffs.
+3. Enemies have complex AI:
+   - They can heal themselves if HP is low.
+   - They target weak players first.
+   - They use skills based on their type (e.g., Fire monsters use burn, Ice monsters use stun).
+4. When a player uses a skill, check if it's on cooldown. If not, apply the effect and set the cooldown.
+5. Status effects persist over turns. Track their remaining duration.
+
+### Equipment & Enchantment System:
+1. Players can equip weapons, armor, and accessories.
+2. Equipped items provide stat bonuses and special effects.
+3. Players can visit a Blacksmith to enchant items, increasing their stats or adding special effects.
+4. There are 7 legendary weapons representing the 7 Deadly Sins (Pride, Envy, Wrath, Sloth, Greed, Gluttony, Lust), each with unique powerful effects.
+5. If an item is equipped or enchanted, use 'equipment_updated' or 'enchantment_executed' in the response.
+
+### Interaction System (Duel, Trade, Party):
+1. Players can initiate interactions (duel, trade, party) with other players.
+2. **CRITICAL**: Before initiating, check if the target player is online (status: 'active'). If offline, inform the player and do not initiate.
+3. To initiate, the player states their intent (e.g., "I want to duel [Player Name]").
+4. The Game Master validates if both players are in the same location and if the target is online.
+5. If valid, the Game Master MUST ONLY return an interaction_request object. DO NOT perform the action (e.g., do not start the duel, do not transfer items) until the request is accepted.
+6. When the player accepts, the Game Master will receive a new action "I accept the [type] request from [Player Name]". Only then should the Game Master perform the action and update the state.
+7. If a request is accepted, use the corresponding signal (e.g., 'trade_executed', 'duel_started') in the response.
 
 Respond ONLY with a JSON object matching the provided schema. Do not include markdown formatting like \`\`\`json.`;
 
@@ -92,145 +111,234 @@ ${truncatedRecentStories}
 7. Describe how the world or other players might react.
 8. Provide 3-4 options for the player's next move.
 9. If the player achieves something great, you can award a new Title or upgrade their Rank (F, E, D, C, B, A, S).
+10. **LANGUAGE**: Remember to write narrative, world reaction, and next options in Bahasa Indonesia, but keep RPG terms in English.
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite-preview', // Most cost-effective model for high-frequency RPG actions
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            narasi: { type: Type.STRING, description: "The enriched narrative of what happens." },
-            mekanik: {
-              type: Type.OBJECT,
-              properties: {
-                hp_change: { type: Type.NUMBER, description: "Change in HP (negative for damage, positive for heal, 0 for none)" },
-                mp_change: { type: Type.NUMBER, description: "Change in MP" },
-                exp_gained: { type: Type.NUMBER, description: "EXP gained from the action" },
-                gold_change: { type: Type.NUMBER, description: "Change in Gold (money). Positive for gain, negative for loss." },
-                items_gained: { 
-                  type: Type.ARRAY, 
-                  items: { 
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING },
-                      rank: { type: Type.STRING, description: "Item rank: F, E, D, C, B, A, S" },
-                      buyPrice: { type: Type.NUMBER, description: "Price to buy this item in shops" },
-                      sellPrice: { type: Type.NUMBER, description: "Price to sell this item to shops" }
-                    },
-                    required: ["name", "rank", "buyPrice", "sellPrice"]
-                  }, 
-                  description: "Items acquired" 
-                },
-                items_lost: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: "Names of items lost or sold."
-                },
-                status_effects: { type: Type.ARRAY, items: { type: Type.STRING }, description: "New status effects" },
-                new_status: { type: Type.STRING, description: "New status (e.g., 'Bangsawan'). Empty string if no change." },
-                new_profession: { type: Type.STRING, description: "New profession (e.g., 'Ksatria'). Empty string if no change." },
-                location_change: { type: Type.STRING, description: "New location name, if the player moved. Otherwise empty string." },
-                guild_joined: { type: Type.STRING, description: "Name of the guild joined (e.g., 'Adventurer'), if any. Otherwise empty string." },
-                updated_quests: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING },
-                      rank: { type: Type.STRING },
-                      description: { type: Type.STRING }
-                    },
-                    required: ["name", "rank", "description"]
-                  },
-                  description: "If the quest board should be updated, provide the new list of available quests."
-                },
-                updated_merchant_stock: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING },
-                      rank: { type: Type.STRING },
-                      buyPrice: { type: Type.NUMBER },
-                      sellPrice: { type: Type.NUMBER },
-                      stock: { type: Type.NUMBER }
-                    },
-                    required: ["name", "rank", "buyPrice", "sellPrice", "stock"]
-                  },
-                  description: "If the merchant stock should be updated (due to RNG or story), provide the new list of items."
-                },
-                new_title: { 
-                  type: Type.OBJECT, 
-                  description: "Award a new title if deserved. Null if none.",
-                  properties: {
-                    name: { type: Type.STRING },
-                    effect: { type: Type.STRING }
-                  },
-                  required: ["name", "effect"]
-                },
-                new_rank: { type: Type.STRING, description: "New rank (F, E, D, C, B, A, S) if upgraded. Empty string if no change." },
-                pets: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      name: { type: Type.STRING },
-                      type: { type: Type.STRING },
-                      level: { type: Type.NUMBER },
-                      hp: { type: Type.NUMBER },
-                      max_hp: { type: Type.NUMBER },
-                      str: { type: Type.NUMBER },
-                      agi: { type: Type.NUMBER },
-                      int: { type: Type.NUMBER },
-                      status: { type: Type.STRING, description: "active or mission" }
-                    },
-                    required: ["id", "name", "type", "level", "hp", "max_hp", "str", "agi", "int", "status"]
-                  },
-                  description: "Updated list of pets."
-                },
-                trade_executed: {
-                  type: Type.OBJECT,
-                  description: "If a trade was executed, provide details.",
-                  properties: {
-                    item_traded: { type: Type.STRING },
-                    pet_traded: { type: Type.STRING },
-                    to_player: { type: Type.STRING }
-                  }
-                }
-              },
-              required: ["hp_change", "mp_change", "exp_gained", "gold_change", "items_gained", "items_lost", "status_effects", "location_change", "guild_joined", "new_rank"]
-            },
-            dunia_bereaksi: { type: Type.STRING, description: "How the world or nearby entities react to this action." },
-            pilihan_selanjutnya: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-4 options for the player's next move." },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant tags for this story entry (e.g., location, NPCs involved, event name)." }
-          },
-          required: ["narasi", "mekanik", "dunia_bereaksi", "pilihan_selanjutnya", "tags"]
-        }
-      }
-    });
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const text = response.text;
-    if (!text) {
-      throw new Error("No response from AI Game Master.");
-    }
+  let retries = 3;
+  let backoff = 1000;
 
-    // Clean response text in case markdown blocks are returned despite instructions
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+  while (retries > 0) {
     try {
-      return JSON.parse(cleanJson);
-    } catch (parseError) {
-      console.error("JSON Parse Error. Raw text:", text);
-      throw new Error("Game Master returned an invalid response format.");
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview', // Most cost-effective model for high-frequency RPG actions
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              narasi: { type: Type.STRING, description: "The enriched narrative of what happens." },
+              mekanik: {
+                type: Type.OBJECT,
+                properties: {
+                  hp_change: { type: Type.NUMBER, description: "Change in HP (negative for damage, positive for heal, 0 for none)" },
+                  mp_change: { type: Type.NUMBER, description: "Change in MP" },
+                  exp_gained: { type: Type.NUMBER, description: "EXP gained from the action" },
+                  gold_change: { type: Type.NUMBER, description: "Change in Gold (money). Positive for gain, negative for loss." },
+                  items_gained: { 
+                    type: Type.ARRAY, 
+                    items: { 
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        rank: { type: Type.STRING, description: "Item rank: F, E, D, C, B, A, S" },
+                        buyPrice: { type: Type.NUMBER, description: "Price to buy this item in shops" },
+                        sellPrice: { type: Type.NUMBER, description: "Price to sell this item to shops" }
+                      },
+                      required: ["name", "rank", "buyPrice", "sellPrice"]
+                    }, 
+                    description: "Items acquired" 
+                  },
+                  items_lost: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: "Names of items lost or sold."
+                  },
+                  status_effects: { type: Type.ARRAY, items: { type: Type.STRING }, description: "New status effects" },
+                  new_status: { type: Type.STRING, description: "New status (e.g., 'Bangsawan'). Empty string if no change." },
+                  new_profession: { type: Type.STRING, description: "New profession (e.g., 'Ksatria'). Empty string if no change." },
+                  location_change: { type: Type.STRING, description: "New location name, if the player moved. Otherwise empty string." },
+                  guild_joined: { type: Type.STRING, description: "Name of the guild joined (e.g., 'Adventurer'), if any. Otherwise empty string." },
+                  updated_quests: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        rank: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                      },
+                      required: ["name", "rank", "description"]
+                    },
+                    description: "If the quest board should be updated, provide the new list of available quests."
+                  },
+                  updated_merchant_stock: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        rank: { type: Type.STRING },
+                        buyPrice: { type: Type.NUMBER },
+                        sellPrice: { type: Type.NUMBER },
+                        stock: { type: Type.NUMBER }
+                      },
+                      required: ["name", "rank", "buyPrice", "sellPrice", "stock"]
+                    },
+                    description: "If the merchant stock should be updated (due to RNG or story), provide the new list of items."
+                  },
+                  new_title: { 
+                    type: Type.OBJECT, 
+                    description: "Award a new title if deserved. Null if none.",
+                    properties: {
+                      name: { type: Type.STRING },
+                      effect: { type: Type.STRING }
+                    },
+                    required: ["name", "effect"]
+                  },
+                  new_rank: { type: Type.STRING, description: "New rank (F, E, D, C, B, A, S) if upgraded. Empty string if no change." },
+                  pets: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        level: { type: Type.NUMBER },
+                        hp: { type: Type.NUMBER },
+                        max_hp: { type: Type.NUMBER },
+                        str: { type: Type.NUMBER },
+                        agi: { type: Type.NUMBER },
+                        int: { type: Type.NUMBER },
+                        status: { type: Type.STRING, description: "active or mission" }
+                      },
+                      required: ["id", "name", "type", "level", "hp", "max_hp", "str", "agi", "int", "status"]
+                    },
+                    description: "Updated list of pets."
+                  },
+                  skills: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        cooldown: { type: Type.NUMBER },
+                        remainingCooldown: { type: Type.NUMBER },
+                        manaCost: { type: Type.NUMBER }
+                      },
+                      required: ["id", "name", "description", "cooldown", "remainingCooldown", "manaCost"]
+                    },
+                    description: "Updated list of skills with cooldowns."
+                  },
+                  active_status_effects: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        type: { type: Type.STRING, description: "stun, poison, burn, buff, debuff" },
+                        duration: { type: Type.NUMBER },
+                        description: { type: Type.STRING }
+                      },
+                      required: ["id", "name", "type", "duration", "description"]
+                    },
+                    description: "Updated list of active status effects."
+                  },
+                  trade_executed: {
+                    type: Type.OBJECT,
+                    description: "If a trade was executed, provide details.",
+                    properties: {
+                      item_traded: { type: Type.STRING },
+                      pet_traded: { type: Type.STRING },
+                      to_player: { type: Type.STRING }
+                    }
+                  },
+                  equipment_updated: {
+                    type: Type.OBJECT,
+                    description: "If equipment was changed, provide details.",
+                    properties: {
+                      item_equipped: { type: Type.STRING },
+                      slot: { type: Type.STRING, description: "weapon, armor, or accessory" }
+                    }
+                  },
+                  enchantment_executed: {
+                    type: Type.OBJECT,
+                    description: "If an item was enchanted, provide details.",
+                    properties: {
+                      item_enchanted: { type: Type.STRING },
+                      new_enchant_level: { type: Type.NUMBER }
+                    }
+                  },
+                  combat_data: {
+                    type: Type.OBJECT,
+                    description: "If in combat, provide enemy status.",
+                    properties: {
+                      enemyName: { type: Type.STRING },
+                      enemyHp: { type: Type.NUMBER },
+                      enemyMaxHp: { type: Type.NUMBER },
+                      statusEffects: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    },
+                    required: ["enemyName", "enemyHp", "enemyMaxHp"]
+                  },
+                  interaction_request: {
+                    type: Type.OBJECT,
+                    description: "If a player initiates an interaction (duel, trade, party), provide request details.",
+                    properties: {
+                      from_player_name: { type: Type.STRING },
+                      from_player_id: { type: Type.STRING },
+                      to_player_id: { type: Type.STRING },
+                      type: { type: Type.STRING, description: "duel, trade, party" },
+                      message: { type: Type.STRING }
+                    },
+                    required: ["from_player_name", "from_player_id", "to_player_id", "type", "message"]
+                  }
+                },
+                required: ["hp_change", "mp_change", "exp_gained", "gold_change", "items_gained", "items_lost", "status_effects", "location_change", "guild_joined", "new_rank"]
+              },
+              dunia_bereaksi: { type: Type.STRING, description: "How the world or nearby entities react to this action." },
+              pilihan_selanjutnya: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-4 options for the player's next move." },
+              tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant tags for this story entry (e.g., location, NPCs involved, event name)." }
+            },
+            required: ["narasi", "mekanik", "dunia_bereaksi", "pilihan_selanjutnya", "tags"]
+          }
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("No response from AI Game Master.");
+      }
+
+      // Clean response text in case markdown blocks are returned despite instructions
+      const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      try {
+        return JSON.parse(cleanJson);
+      } catch (parseError) {
+        console.error("JSON Parse Error. Raw text:", text);
+        throw new Error("Game Master returned an invalid response format.");
+      }
+    } catch (error: any) {
+      if (error.message?.includes('429') || error.message?.includes('Rate exceeded') || error.message?.includes('Quota exceeded')) {
+        retries--;
+        if (retries === 0) {
+          console.error("Game Master Error (Rate Limit):", error);
+          throw new Error("Sistem sedang sibuk karena terlalu banyak permintaan. Silakan coba lagi dalam beberapa saat.");
+        }
+        console.warn(`Rate limit tercapai. Mencoba lagi dalam ${backoff}ms...`);
+        await delay(backoff);
+        backoff *= 2;
+      } else {
+        console.error("Game Master Error:", error);
+        throw error;
+      }
     }
-  } catch (error) {
-    console.error("Game Master Error:", error);
-    throw error;
   }
 }

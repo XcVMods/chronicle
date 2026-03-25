@@ -3,7 +3,9 @@ import { db, auth } from '../firebase';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, setDoc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { processPlayerAction } from '../lib/gameMaster';
 import { GameAlert } from './GameAlert';
-import { LogOut, Send, User, Shield, Zap, Heart, MapPin, Star, Map as MapIcon, MessageSquare, Users2, Swords, Handshake, Info, Wrench, PawPrint, ArrowLeftRight } from 'lucide-react';
+import PartyModal from './PartyModal';
+import { Equipment } from '../types';
+import { LogOut, Send, User, Shield, Zap, Heart, MapPin, Star, Map as MapIcon, MessageSquare, Users2, Swords, Handshake, Info, Wrench, PawPrint, ArrowLeftRight, Users, Flame, Skull, Droplet, Snowflake } from 'lucide-react';
 
 export const mapLocations = [
   { 
@@ -75,11 +77,20 @@ export const mapLocations = [
     type: 'boss',
     lore: 'Tempat tinggal para entitas suci dan malaikat. Hanya mereka yang telah membuktikan kelayakannya yang dapat menginjakkan kaki di sini untuk menghadapi ujian terakhir.',
     atmosphere: 'Terang benderang oleh cahaya suci yang tidak menyilaukan, udara terasa sangat ringan dan murni, diiringi paduan suara surgawi yang samar.'
+  },
+  { 
+    name: 'Blacksmith', 
+    desc: 'Tempat pandai besi legendaris untuk menempa dan memperkuat peralatan.', 
+    type: 'safezone',
+    lore: 'Pandai besi ini mampu menempa senjata dengan api abadi. Membutuhkan biaya emas untuk setiap proses enchant.',
+    atmosphere: 'Panas, suara dentuman palu godam, dan percikan api yang indah.'
   }
 ];
 
 export default function Game({ user, onLogout }: { user: any, onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState('story'); // 'story', 'map', 'players', 'character', 'guilds', 'pets', 'dev'
+  const [activeCombat, setActiveCombat] = useState<any>(null); // { enemyName: string, enemyHp: number, enemyMaxHp: number, statusEffects: string[] }
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [alertMessage, setAlertMessage] = useState('');
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [stories, setStories] = useState<any[]>([]);
@@ -88,7 +99,21 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [character, setCharacter] = useState(user.character);
+  const [isPartyModalOpen, setIsPartyModalOpen] = useState(false);
+  const [parties, setParties] = useState<any[]>([]);
+  const [myParty, setMyParty] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pendingRequests.length > 0) {
+      const timer = setTimeout(() => {
+        setPendingRequests(prev => prev.slice(1));
+        setAlertMessage('Interaction request timed out.');
+        setIsAlertOpen(true);
+      }, 15000);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingRequests]);
 
   useEffect(() => {
     // Listen to World Story
@@ -261,6 +286,26 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
       const gmResponse = await processPlayerAction(actionText, character, recentContext, {}, enhancedWorldState);
 
+      // Update Combat UI
+      if (gmResponse.mekanik.combat_data) {
+        setActiveCombat(gmResponse.mekanik.combat_data);
+      } else {
+        setActiveCombat(null);
+      }
+
+      // Update Interaction Request
+      if (gmResponse.mekanik.interaction_request) {
+        if (gmResponse.mekanik.interaction_request.to_player_id === user.uid) {
+          setPendingRequests(prev => [...prev, gmResponse.mekanik.interaction_request]);
+        }
+      }
+
+      // Update Equipment/Enchantment
+      if (gmResponse.mekanik.equipment_updated || gmResponse.mekanik.enchantment_executed) {
+        setAlertMessage(gmResponse.mekanik.equipment_updated ? `Equipped: ${gmResponse.mekanik.equipment_updated.item_equipped}` : `Enchanted: ${gmResponse.mekanik.enchantment_executed.item_enchanted} to level ${gmResponse.mekanik.enchantment_executed.new_enchant_level}`);
+        setIsAlertOpen(true);
+      }
+
       // 2. Update Character Stats
       const newExp = character.exp + (gmResponse.mekanik.exp_gained || 0);
       const { level: newLevel, rank: newRank } = getLevelAndRank(newExp);
@@ -377,6 +422,26 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
     handleAction(`I approach ${targetPlayer.display_name} and request a ${actionType}.`);
   };
 
+  const getStatusEffectStyle = (effect: string) => {
+    const lowerEffect = effect.toLowerCase();
+    if (lowerEffect.includes('burn') || lowerEffect.includes('fire')) {
+      return { icon: <Flame size={12} />, color: 'text-orange-400', bg: 'bg-orange-950/50', border: 'border-orange-900/50' };
+    }
+    if (lowerEffect.includes('poison') || lowerEffect.includes('toxic') || lowerEffect.includes('venom')) {
+      return { icon: <Skull size={12} />, color: 'text-green-400', bg: 'bg-green-950/50', border: 'border-green-900/50' };
+    }
+    if (lowerEffect.includes('stun') || lowerEffect.includes('paralyze') || lowerEffect.includes('shock')) {
+      return { icon: <Zap size={12} />, color: 'text-yellow-400', bg: 'bg-yellow-950/50', border: 'border-yellow-900/50' };
+    }
+    if (lowerEffect.includes('bleed')) {
+      return { icon: <Droplet size={12} />, color: 'text-red-400', bg: 'bg-red-950/50', border: 'border-red-900/50' };
+    }
+    if (lowerEffect.includes('freeze') || lowerEffect.includes('chill') || lowerEffect.includes('ice')) {
+      return { icon: <Snowflake size={12} />, color: 'text-cyan-400', bg: 'bg-cyan-950/50', border: 'border-cyan-900/50' };
+    }
+    return { icon: <Info size={12} />, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-800' };
+  };
+
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden">
       {/* Header */}
@@ -390,12 +455,44 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
           <button onClick={onLogout} className="text-zinc-500 hover:text-red-400 p-1">
             <LogOut size={18} />
           </button>
+          <button onClick={() => setIsPartyModalOpen(true)} className="text-zinc-500 hover:text-emerald-400 p-1">
+            <Users size={18} />
+          </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden relative">
         
+        {/* Combat UI Overlay */}
+        {activeCombat && (
+          <div className="absolute top-0 left-0 w-full bg-zinc-950/90 border-b border-red-900/50 p-4 z-30 animate-in slide-in-from-top">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-red-400 text-lg">{activeCombat.enemyName}</h3>
+              <span className="text-xs text-zinc-500 uppercase font-bold">Combat Active</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-4 bg-zinc-900 rounded-full overflow-hidden border border-zinc-700">
+                <div className="h-full bg-red-600 transition-all" style={{ width: `${(activeCombat.enemyHp / activeCombat.enemyMaxHp) * 100}%` }}></div>
+              </div>
+              <span className="text-sm font-mono text-zinc-300">{activeCombat.enemyHp} / {activeCombat.enemyMaxHp}</span>
+            </div>
+            {activeCombat.statusEffects && activeCombat.statusEffects.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {activeCombat.statusEffects.map((effect: string, i: number) => {
+                  const style = getStatusEffectStyle(effect);
+                  return (
+                    <span key={i} className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border ${style.bg} ${style.border} ${style.color}`}>
+                      {style.icon}
+                      {effect}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* STORY TAB */}
         <div className={`absolute inset-0 flex flex-col ${activeTab === 'story' ? 'z-10 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
           <div className="flex-1 overflow-y-auto p-4 pb-32 space-y-6 scroll-smooth">
@@ -451,11 +548,11 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                 <input
                   type="text" value={input} onChange={(e) => setInput(e.target.value)}
                   placeholder="What do you do next?"
-                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500 text-zinc-100 placeholder-zinc-500"
+                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-amber-500 text-zinc-100 placeholder-zinc-500"
                   disabled={loading}
                 />
-                <button type="submit" disabled={loading || !input.trim()} className="bg-amber-600 hover:bg-amber-500 text-white px-5 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 min-h-[44px]">
-                  {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={18} />}
+                <button type="submit" disabled={loading || !input.trim()} className="bg-amber-600 hover:bg-amber-500 text-white px-6 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 min-h-[56px] min-w-[56px]">
+                  {loading ? <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={24} />}
                 </button>
               </form>
             </div>
@@ -479,9 +576,9 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                 </div>
                 <div className="flex gap-2">
                   {character.location !== loc.name ? (
-                    <button onClick={() => handleAction(`I travel to ${loc.name}`)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-lg flex-1 min-h-[44px]">Travel Here</button>
+                    <button onClick={() => handleAction(`I travel to ${loc.name}`)} className="text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-6 py-4 rounded-xl flex-1 min-h-[56px] font-bold">Travel Here</button>
                   ) : (
-                    <button onClick={() => handleAction(`I explore around ${loc.name} looking for events.`)} className="text-xs bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 border border-amber-600/30 px-4 py-2 rounded-lg flex-1 min-h-[44px]">Explore Area</button>
+                    <button onClick={() => handleAction(`I explore around ${loc.name} looking for events.`)} className="text-sm bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 border border-amber-600/30 px-6 py-4 rounded-xl flex-1 min-h-[56px] font-bold">Explore Area</button>
                   )}
                 </div>
               </div>
@@ -491,37 +588,34 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
         {/* PLAYERS TAB */}
         <div className={`absolute inset-0 overflow-y-auto p-4 pb-24 ${activeTab === 'players' ? 'z-10 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
-          <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2"><Users2 size={20}/> Realm Inhabitants</h2>
-          <div className="grid gap-3">
+          <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2"><Users2 size={24}/> Realm Inhabitants</h2>
+          <div className="grid gap-4">
             {players.filter(p => p.role !== 'dev').map((p) => (
-              <div key={p.id} className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+              <div key={p.id} className="bg-zinc-900 p-5 rounded-xl border border-zinc-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
                     <div className="relative">
-                      <div className="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center text-amber-500 font-serif font-bold text-lg">
+                      <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center text-amber-500 font-serif font-bold text-xl">
                         {p.character?.rank || 'F'}
                       </div>
-                      <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-zinc-900 ${p.online ? 'bg-emerald-500' : 'bg-zinc-600'}`}></div>
+                      <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-zinc-900 ${p.online ? 'bg-emerald-500' : 'bg-zinc-600'}`}></div>
                     </div>
                     <div>
-                      <h3 className="font-bold text-zinc-100 flex items-center gap-2">
+                      <h3 className="font-bold text-zinc-100 flex items-center gap-2 text-base">
                         {p.display_name} 
                         {p.id === user.uid && <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">You</span>}
                       </h3>
-                      <p className="text-xs text-zinc-400">Lvl {p.character?.level || 1} • {p.character?.title || 'Novice'}</p>
+                      <p className="text-sm text-zinc-400">Lvl {p.character?.level || 1} • {p.character?.title || 'Novice'}</p>
                     </div>
                   </div>
                 </div>
                 {p.id !== user.uid && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
-                    <button onClick={() => handlePlayerInteraction(p, 'trade')} className="flex-1 flex items-center justify-center gap-1 text-xs bg-emerald-900/20 hover:bg-emerald-900/40 text-emerald-400 py-2 rounded-lg min-h-[44px]">
-                      <ArrowLeftRight size={14}/> Trade
+                  <div className="flex gap-3 mt-4 pt-4 border-t border-zinc-800">
+                    <button onClick={() => handlePlayerInteraction(p, 'trade')} className="flex-1 flex items-center justify-center gap-2 text-sm bg-emerald-900/20 hover:bg-emerald-900/40 text-emerald-400 py-4 rounded-xl min-h-[56px] font-bold">
+                      <ArrowLeftRight size={18}/> Trade
                     </button>
-                    <button onClick={() => handlePlayerInteraction(p, 'duel')} className="flex-1 flex items-center justify-center gap-1 text-xs bg-red-900/20 hover:bg-red-900/40 text-red-400 py-2 rounded-lg min-h-[44px]">
-                      <Swords size={14}/> Duel
-                    </button>
-                    <button onClick={() => handlePlayerInteraction(p, 'party invite')} className="flex-1 flex items-center justify-center gap-1 text-xs bg-blue-900/20 hover:bg-blue-900/40 text-blue-400 py-2 rounded-lg min-h-[44px]">
-                      <Handshake size={14}/> Party
+                    <button onClick={() => handlePlayerInteraction(p, 'duel')} className="flex-1 flex items-center justify-center gap-2 text-sm bg-red-900/20 hover:bg-red-900/40 text-red-400 py-4 rounded-xl min-h-[56px] font-bold">
+                      <Swords size={18}/> Duel
                     </button>
                   </div>
                 )}
@@ -617,9 +711,48 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                 </div>
               </div>
 
+              {/* Equipment */}
+              <div className="mb-6">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Equipment</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {['weapon', 'armor', 'accessory'].map((slot) => (
+                    <div key={slot} className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-center">
+                      <div className="text-[10px] text-zinc-500 uppercase mb-1">{slot}</div>
+                      <div className="text-xs font-bold text-zinc-300">
+                        {character.equipment?.[slot as keyof Equipment]?.name || '-'}
+                      </div>
+                      {character.equipment?.[slot as keyof Equipment] && (
+                        <div className="flex justify-center gap-1 mt-1">
+                          <div className="text-[10px] text-zinc-500">
+                            [{character.equipment[slot as keyof Equipment]?.rank || 'F'}]
+                          </div>
+                          <div className="text-[10px] text-amber-500">
+                            +{character.equipment[slot as keyof Equipment]?.enchantLevel || 0}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Inventory */}
               <div>
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Inventory</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Inventory</h3>
+                  <div className="flex gap-2">
+                    <select className="bg-zinc-950 text-zinc-300 text-[10px] px-2 py-1 rounded border border-zinc-800" onChange={(e) => { /* Add filter logic */ }}>
+                      <option value="all">All</option>
+                      <option value="weapon">Weapon</option>
+                      <option value="armor">Armor</option>
+                      <option value="accessory">Accessory</option>
+                    </select>
+                    <select className="bg-zinc-950 text-zinc-300 text-[10px] px-2 py-1 rounded border border-zinc-800" onChange={(e) => { /* Add sort logic */ }}>
+                      <option value="name">Name</option>
+                      <option value="rank">Rank</option>
+                    </select>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {(character.inventory || []).map((item: any, i: number) => {
                     const itemName = typeof item === 'string' ? item : item.name;
@@ -679,7 +812,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                 <p className="text-xs text-zinc-400">Take quests, earn EXP, and rank up.</p>
               </div>
               <div className="p-4">
-                {character.guild !== 'Adventurer' ? (
+                {!character.guild || !character.guild.toLowerCase().includes('adventurer') ? (
                   <div className="text-center py-4">
                     <p className="text-sm text-zinc-400 mb-4">You are not affiliated with the Adventurer's Guild.</p>
                     <button onClick={() => handleAction("I register at the Adventurer's Guild.")} className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-lg text-sm font-bold">
@@ -840,39 +973,110 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
       </div>
 
       {/* Bottom Navigation */}
-      <div className="h-16 bg-zinc-950 border-t border-zinc-900 flex items-center justify-around px-2 shrink-0 pb-safe z-20">
+      <div className="h-20 border-t border-zinc-900 flex items-center justify-around bg-zinc-950/95 backdrop-blur-sm z-20 shrink-0 pb-2">
         <button onClick={() => setActiveTab('story')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'story' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <MessageSquare size={20} />
+          <MessageSquare size={24} />
           <span className="text-[10px] font-medium">Story</span>
         </button>
         <button onClick={() => setActiveTab('map')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'map' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <MapIcon size={20} />
+          <MapIcon size={24} />
           <span className="text-[10px] font-medium">Map</span>
         </button>
         <button onClick={() => setActiveTab('guilds')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'guilds' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <Shield size={20} />
+          <Shield size={24} />
           <span className="text-[10px] font-medium">Guilds</span>
         </button>
         <button onClick={() => setActiveTab('players')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'players' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <Users2 size={20} />
+          <Users2 size={24} />
           <span className="text-[10px] font-medium">Players</span>
         </button>
         <button onClick={() => setActiveTab('character')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'character' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <User size={20} />
+          <User size={24} />
           <span className="text-[10px] font-medium">Character</span>
         </button>
         <button onClick={() => setActiveTab('pets')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'pets' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-          <PawPrint size={20} />
+          <PawPrint size={24} />
           <span className="text-[10px] font-medium">Pets</span>
         </button>
         {isDev && (
           <button onClick={() => setActiveTab('dev')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'dev' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
-            <Wrench size={20} />
+            <Wrench size={24} />
             <span className="text-[10px] font-medium">Dev</span>
           </button>
         )}
       </div>
       <GameAlert isOpen={isAlertOpen} message={alertMessage} onClose={() => setIsAlertOpen(false)} />
+      
+      {/* Interaction Requests Modal */}
+      {pendingRequests.length > 0 && (
+        <div className="fixed inset-0 bg-zinc-950/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-bold text-zinc-100 mb-2">Interaction Request</h3>
+            <p className="text-zinc-400 text-sm mb-6">{pendingRequests[0].from_player_name} wants to {pendingRequests[0].type}: {pendingRequests[0].message}</p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  handleAction(`I accept the ${pendingRequests[0].type} request from ${pendingRequests[0].from_player_name}`);
+                  setPendingRequests(prev => prev.slice(1));
+                }}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg font-bold"
+              >
+                Accept
+              </button>
+              <button 
+                onClick={() => {
+                  handleAction(`I decline the ${pendingRequests[0].type} request from ${pendingRequests[0].from_player_name}`);
+                  setPendingRequests(prev => prev.slice(1));
+                }}
+                className="flex-1 bg-red-900/50 hover:bg-red-900/70 text-red-200 py-2 rounded-lg font-bold"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <PartyModal 
+        isOpen={isPartyModalOpen} 
+        onClose={() => setIsPartyModalOpen(false)} 
+        user={user}
+        parties={parties}
+        myParty={myParty}
+        onCreateParty={async (name: string, desc: string, approvalType: string) => {
+          await addDoc(collection(db, 'parties'), {
+            name,
+            description: desc,
+            approvalType,
+            leaderId: user.uid,
+            members: [{ id: user.uid, name: user.display_name }],
+            joinRequests: []
+          });
+          setIsPartyModalOpen(false);
+          setAlertMessage('Party created!'); setIsAlertOpen(true);
+        }}
+        onJoinParty={async (partyId: string) => {
+          const partyRef = doc(db, 'parties', partyId);
+          await updateDoc(partyRef, {
+            joinRequests: [...(myParty?.joinRequests || []), { playerId: user.uid, playerName: user.display_name }]
+          });
+          setAlertMessage('Join request sent!'); setIsAlertOpen(true);
+        }}
+        onApproveJoinRequest={async (playerId: string) => {
+          const partyRef = doc(db, 'parties', myParty.id);
+          const player = players.find(p => p.id === playerId);
+          await updateDoc(partyRef, {
+            members: [...myParty.members, { id: playerId, name: player?.display_name }],
+            joinRequests: myParty.joinRequests.filter((req: any) => req.playerId !== playerId)
+          });
+        }}
+        onAcceptInvitation={(partyId: string) => {
+          // Implement logic
+        }}
+        onDeclineInvitation={(partyId: string) => {
+          // Implement logic
+        }}
+        players={[]}
+      />
     </div>
   );
 }
