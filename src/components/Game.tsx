@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, setDoc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
 import { processPlayerAction } from '../lib/gameMaster';
-import { LogOut, Send, User, Shield, Zap, Heart, MapPin, Star, Map as MapIcon, MessageSquare, Users2, Swords, Handshake, Info, Wrench } from 'lucide-react';
+import { GameAlert } from './GameAlert';
+import { LogOut, Send, User, Shield, Zap, Heart, MapPin, Star, Map as MapIcon, MessageSquare, Users2, Swords, Handshake, Info, Wrench, PawPrint, ArrowLeftRight } from 'lucide-react';
 
 export const mapLocations = [
   { 
@@ -78,7 +79,9 @@ export const mapLocations = [
 ];
 
 export default function Game({ user, onLogout }: { user: any, onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState('story'); // 'story', 'map', 'players', 'character', 'guilds'
+  const [activeTab, setActiveTab] = useState('story'); // 'story', 'map', 'players', 'character', 'guilds', 'pets', 'dev'
+  const [alertMessage, setAlertMessage] = useState('');
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [stories, setStories] = useState<any[]>([]);
   const [worldState, setWorldState] = useState<any>({ quests: [], merchantStock: [] });
   const [players, setPlayers] = useState<any[]>([]);
@@ -149,6 +152,35 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
   const isDev = auth.currentUser?.email === 'xcvmods@developer.com';
   const [devStats, setDevStats] = useState(character.stats);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState(user.display_name);
+
+  const handleResetWorld = async () => {
+    if (!window.confirm("Are you sure you want to delete ALL stories? This cannot be undone.")) return;
+    try {
+      const storiesSnapshot = await getDocs(collection(db, 'stories'));
+      const batch = writeBatch(db);
+      storiesSnapshot.docs.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      setAlertMessage('World reset successfully!'); setIsAlertOpen(true);
+    } catch (err) {
+      console.error("Reset World Error:", err);
+      setAlertMessage(`Failed to reset world: ${err instanceof Error ? err.message : String(err)}`); setIsAlertOpen(true);
+    }
+  };
+
+  const handleUpdateDisplayName = async () => {
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        display_name: newDisplayName
+      });
+      alert('Display name updated!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update display name.');
+    }
+  };
 
   useEffect(() => {
     const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -293,7 +325,9 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
         title: newTitle,
         titles: newTitlesList,
         guild: gmResponse.mekanik.guild_joined || character.guild || null,
-        inventory: finalInventory
+        inventory: finalInventory,
+        status: gmResponse.mekanik.new_status || character.status || 'Commoner',
+        profession: gmResponse.mekanik.new_profession || character.profession || 'None'
       };
 
       await updateDoc(doc(db, 'users', user.uid), {
@@ -341,51 +375,6 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
   const handlePlayerInteraction = (targetPlayer: any, actionType: string) => {
     handleAction(`I approach ${targetPlayer.display_name} and request a ${actionType}.`);
-  };
-
-  const handleSpawnDummy = async () => {
-    try {
-      await setDoc(doc(db, 'users', 'dummy_player_1'), {
-        uid: 'dummy_player_1',
-        username: 'dummy_tester',
-        display_name: 'Dummy Tester',
-        online: true,
-        needsCharacter: false,
-        createdAt: serverTimestamp(),
-        character: {
-          ras: 'Orc',
-          class: 'Warrior',
-          element: 'Api',
-          level: 5,
-          exp: 0,
-          hp: 250,
-          max_hp: 250,
-          mp: 50,
-          max_mp: 50,
-          stats: { str: 20, agi: 10, int: 5, def: 15, luck: 5 },
-          skills: ['Power Strike', 'Bloodlust'],
-          inventory: ['Dummy Sword'],
-          location: character.location,
-          rank: 'E',
-          title: 'Test Dummy',
-          titles: [{ name: 'Test Dummy', effect: 'Takes hits' }]
-        }
-      });
-      alert('Dummy Player spawned successfully!');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to spawn dummy.');
-    }
-  };
-
-  const handleRemoveDummy = async () => {
-    try {
-      await deleteDoc(doc(db, 'users', 'dummy_player_1'));
-      alert('Dummy Player removed successfully!');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to remove dummy.');
-    }
   };
 
   return (
@@ -525,6 +514,9 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                 </div>
                 {p.id !== user.uid && (
                   <div className="flex gap-2 mt-3 pt-3 border-t border-zinc-800">
+                    <button onClick={() => handlePlayerInteraction(p, 'trade')} className="flex-1 flex items-center justify-center gap-1 text-xs bg-emerald-900/20 hover:bg-emerald-900/40 text-emerald-400 py-2 rounded-lg min-h-[44px]">
+                      <ArrowLeftRight size={14}/> Trade
+                    </button>
                     <button onClick={() => handlePlayerInteraction(p, 'duel')} className="flex-1 flex items-center justify-center gap-1 text-xs bg-red-900/20 hover:bg-red-900/40 text-red-400 py-2 rounded-lg min-h-[44px]">
                       <Swords size={14}/> Duel
                     </button>
@@ -548,12 +540,32 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
               </div>
               <h2 className="text-2xl font-serif font-bold text-zinc-100">{user.display_name}</h2>
               <p className="text-sm text-amber-500 font-medium mb-1">&lt;{character.title || 'Novice'}&gt;</p>
-              <p className="text-xs text-zinc-400">Lvl {character.level} {character.ras} {character.class}</p>
+              <div className="flex justify-center gap-2 text-xs text-zinc-400 mt-2">
+                <span className="bg-zinc-950 px-2 py-1 rounded border border-zinc-800">Status: {character.status || 'Commoner'}</span>
+                <span className="bg-zinc-950 px-2 py-1 rounded border border-zinc-800">Profesi: {character.profession || 'None'}</span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-2">Lvl {character.level} {character.ras} {character.class}</p>
             </div>
             
             <div className="p-4 space-y-6">
               {/* Vitals */}
               <div className="space-y-3">
+                <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 mb-4">
+                  <h3 className="font-bold text-zinc-100 mb-3 text-xs uppercase">Edit Display Name</h3>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newDisplayName} 
+                      onChange={(e) => setNewDisplayName(e.target.value)}
+                      className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100"
+                      placeholder="New Display Name"
+                    />
+                    <button onClick={handleUpdateDisplayName} className="bg-amber-600 hover:bg-amber-500 text-zinc-950 px-4 py-2 rounded-lg text-sm font-bold">
+                      Save
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex flex-col items-center justify-center">
                     <span className="text-xs text-zinc-500 uppercase font-bold mb-1">Gold</span>
@@ -631,6 +643,30 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
             </div>
           </div>
         </div>
+        {/* PETS TAB */}
+        <div className={`absolute inset-0 overflow-y-auto p-4 pb-24 ${activeTab === 'pets' ? 'z-10 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
+          <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2"><PawPrint size={20}/> My Pets</h2>
+          {character.pets && character.pets.length > 0 ? (
+            <div className="grid gap-3">
+              {character.pets.map((pet: any, i: number) => (
+                <div key={i} className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-zinc-100">{pet.name} <span className="text-xs text-zinc-500 font-normal">({pet.type})</span></h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${pet.status === 'active' ? 'bg-emerald-500 text-zinc-950' : 'bg-zinc-700 text-zinc-300'}`}>{pet.status}</span>
+                  </div>
+                  <div className="text-xs text-zinc-400 mb-2">Level {pet.level} | HP: {pet.hp}/{pet.max_hp}</div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleAction(`Send ${pet.name} on a mission.`)} className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-lg flex-1">Mission</button>
+                    <button onClick={() => handleAction(`Have ${pet.name} assist in combat.`)} className="text-xs bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 border border-amber-600/30 px-4 py-2 rounded-lg flex-1">Assist</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-zinc-500 italic mt-20">No pets tamed yet. Explore the world to find companions!</div>
+          )}
+        </div>
+
         {/* GUILDS TAB */}
         <div className={`absolute inset-0 overflow-y-auto p-4 pb-24 ${activeTab === 'guilds' ? 'z-10 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
           <h2 className="text-xl font-serif font-bold text-amber-500 mb-4 flex items-center gap-2"><Shield size={20}/> Guilds</h2>
@@ -737,15 +773,27 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
             <h2 className="text-xl font-serif font-bold text-emerald-500 mb-4 flex items-center gap-2"><Wrench size={20}/> Developer Tools</h2>
             
             <div className="space-y-6">
-              {/* Dummy Controls */}
+              {/* World Controls */}
               <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
-                <h3 className="font-bold text-zinc-100 mb-3">Dummy Controls</h3>
-                <div className="flex gap-2">
-                  <button onClick={handleSpawnDummy} className="flex-1 bg-emerald-900/30 text-emerald-400 border border-emerald-800 py-2 rounded-lg text-xs font-bold">
-                    + Spawn Dummy
-                  </button>
-                  <button onClick={handleRemoveDummy} className="flex-1 bg-red-900/30 text-red-400 border border-red-800 py-2 rounded-lg text-xs font-bold">
-                    - Remove Dummy
+                <h3 className="font-bold text-zinc-100 mb-3">World Controls</h3>
+                <button onClick={handleResetWorld} className="w-full bg-red-900/30 text-red-400 border border-red-800 py-2 rounded-lg text-xs font-bold">
+                  Reset World (Delete All Stories)
+                </button>
+              </div>
+
+              {/* User Controls */}
+              <div className="bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+                <h3 className="font-bold text-zinc-100 mb-3">User Controls</h3>
+                <div className="space-y-2">
+                  <input 
+                    type="text" 
+                    value={newDisplayName} 
+                    onChange={(e) => setNewDisplayName(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-sm text-zinc-100"
+                    placeholder="New Display Name"
+                  />
+                  <button onClick={handleUpdateDisplayName} className="w-full bg-amber-600 hover:bg-amber-500 text-zinc-950 py-2 rounded-lg text-sm font-bold">
+                    Update Display Name
                   </button>
                 </div>
               </div>
@@ -813,6 +861,10 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
           <User size={20} />
           <span className="text-[10px] font-medium">Character</span>
         </button>
+        <button onClick={() => setActiveTab('pets')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'pets' ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
+          <PawPrint size={20} />
+          <span className="text-[10px] font-medium">Pets</span>
+        </button>
         {isDev && (
           <button onClick={() => setActiveTab('dev')} className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${activeTab === 'dev' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'}`}>
             <Wrench size={20} />
@@ -820,6 +872,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
           </button>
         )}
       </div>
+      <GameAlert isOpen={isAlertOpen} message={alertMessage} onClose={() => setIsAlertOpen(false)} />
     </div>
   );
 }

@@ -78,8 +78,8 @@ export default function CharacterCreation({ user, onComplete }: { user: any, onC
 
     const newUserDoc: any = {
       uid: user.uid,
-      username: user.username,
-      display_name: user.display_name,
+      username: user.username || 'unknown',
+      display_name: user.display_name || 'Unknown Player',
       character,
       needsCharacter: false,
       online: true

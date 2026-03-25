@@ -46,7 +46,16 @@ export default function Auth({ onLogin }: { onLogin: (user: any) => void }) {
         onLogin(newUser);
       }
     } catch (err: any) {
-      setError(err.message);
+      console.error("Auth Error:", err);
+      if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password.');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError('Email is already in use.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password should be at least 6 characters.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

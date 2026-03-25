@@ -7,8 +7,12 @@ export async function processPlayerAction(
   configs: any,
   worldState: any = {}
 ) {
-  // Use GEMINI_API_KEY as primary, fallback to API_KEY
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  // Use GEMINI_API_KEY as primary, fallback to VITE_GEMINI_API_KEY, import.meta.env.GEMINI_API_KEY, or API_KEY
+  const apiKey = 
+    process.env.GEMINI_API_KEY || 
+    (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) || 
+    (import.meta.env && import.meta.env.GEMINI_API_KEY) ||
+    process.env.API_KEY;
   
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey.length < 10) {
     console.error("Gemini API Key is missing, invalid, or too short.");
@@ -23,6 +27,23 @@ export async function processPlayerAction(
 
   const systemInstruction = `You are the AI Game Master for "World Chronicle", a text-based multiplayer RPG.
 Your job is to validate the player's action, enrich the narrative, determine mechanical outcomes, and describe the world's reaction.
+
+### Taming System:
+1. Players can tame monsters (e.g., Slime Hijau, Naga Kecil Hijau).
+2. Taming requires a successful action (e.g., feeding, showing strength, using special items).
+3. If successful, add the monster to the player's 'pets' array in their data.
+4. Pets have stats (HP, STR, AGI, INT) and can be sent on missions or assist in combat.
+5. If a pet assists in combat, calculate its contribution based on its stats.
+
+### Trading System:
+1. Players can trade items or pets with other players.
+2. A player initiates a trade by stating "I want to trade [item/pet] with [Player Name]".
+3. The Game Master validates if both players are in the same location.
+4. If valid, the Game Master creates a trade proposal.
+5. The other player must accept the trade.
+6. Upon acceptance, the Game Master updates both players' inventories/pets.
+7. If a trade is executed, use 'trade_executed' in the response to signal the inventory/pet update.
+
 Respond ONLY with a JSON object matching the provided schema. Do not include markdown formatting like \`\`\`json.`;
 
   const prompt = `
@@ -111,6 +132,8 @@ ${truncatedRecentStories}
                   description: "Names of items lost or sold."
                 },
                 status_effects: { type: Type.ARRAY, items: { type: Type.STRING }, description: "New status effects" },
+                new_status: { type: Type.STRING, description: "New status (e.g., 'Bangsawan'). Empty string if no change." },
+                new_profession: { type: Type.STRING, description: "New profession (e.g., 'Ksatria'). Empty string if no change." },
                 location_change: { type: Type.STRING, description: "New location name, if the player moved. Otherwise empty string." },
                 guild_joined: { type: Type.STRING, description: "Name of the guild joined (e.g., 'Adventurer'), if any. Otherwise empty string." },
                 updated_quests: {
@@ -150,7 +173,36 @@ ${truncatedRecentStories}
                   },
                   required: ["name", "effect"]
                 },
-                new_rank: { type: Type.STRING, description: "New rank (F, E, D, C, B, A, S) if upgraded. Empty string if no change." }
+                new_rank: { type: Type.STRING, description: "New rank (F, E, D, C, B, A, S) if upgraded. Empty string if no change." },
+                pets: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      name: { type: Type.STRING },
+                      type: { type: Type.STRING },
+                      level: { type: Type.NUMBER },
+                      hp: { type: Type.NUMBER },
+                      max_hp: { type: Type.NUMBER },
+                      str: { type: Type.NUMBER },
+                      agi: { type: Type.NUMBER },
+                      int: { type: Type.NUMBER },
+                      status: { type: Type.STRING, description: "active or mission" }
+                    },
+                    required: ["id", "name", "type", "level", "hp", "max_hp", "str", "agi", "int", "status"]
+                  },
+                  description: "Updated list of pets."
+                },
+                trade_executed: {
+                  type: Type.OBJECT,
+                  description: "If a trade was executed, provide details.",
+                  properties: {
+                    item_traded: { type: Type.STRING },
+                    pet_traded: { type: Type.STRING },
+                    to_player: { type: Type.STRING }
+                  }
+                }
               },
               required: ["hp_change", "mp_change", "exp_gained", "gold_change", "items_gained", "items_lost", "status_effects", "location_change", "guild_joined", "new_rank"]
             },
