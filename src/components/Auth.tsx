@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Auth({ onLogin }: { onLogin: (user: any) => void }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -41,8 +41,9 @@ export default function Auth({ onLogin }: { onLogin: (user: any) => void }) {
           username,
           display_name: displayName,
           needsCharacter: true,
-          createdAt: new Date()
+          createdAt: serverTimestamp()
         };
+        await setDoc(doc(db, 'users', userCredential.user.uid), newUser);
         onLogin(newUser);
       }
     } catch (err: any) {

@@ -89,6 +89,7 @@ export const mapLocations = [
 
 export default function Game({ user, onLogout }: { user: any, onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState('story'); // 'story', 'map', 'players', 'character', 'guilds', 'pets', 'dev'
+  const [storyTab, setStoryTab] = useState<'personal' | 'world'>('personal');
   const [activeCombat, setActiveCombat] = useState<any>(null); // { enemyName: string, enemyHp: number, enemyMaxHp: number, statusEffects: string[] }
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [alertMessage, setAlertMessage] = useState('');
@@ -117,7 +118,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
   useEffect(() => {
     // Listen to World Story
-    const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'), limit(50));
+    const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const newStories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
       setStories(newStories);
@@ -127,14 +128,87 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
     // Listen to Character Updates
     const charUnsub = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
       if (docSnap.exists()) {
-        setCharacter(docSnap.data().character);
+        const data = docSnap.data();
+        let char = data.character;
+        
+        if (char && char.exp >= char.level * 100) {
+          let currentExp = char.exp;
+          let currentLevel = char.level;
+          let currentStatPoints = char.statPoints || 0;
+          let maxHp = char.max_hp;
+          let maxMp = char.max_mp;
+
+          while (currentExp >= (currentLevel * 100)) {
+            currentExp -= (currentLevel * 100);
+            currentLevel++;
+            currentStatPoints += 2;
+            maxHp += 50;
+            maxMp += 20;
+          }
+
+          const updatedChar = {
+            ...char,
+            exp: currentExp,
+            level: currentLevel,
+            statPoints: currentStatPoints,
+            max_hp: maxHp,
+            max_mp: maxMp,
+            hp: char.hp > maxHp ? maxHp : char.hp,
+            mp: char.mp > maxMp ? maxMp : char.mp
+          };
+
+          updateDoc(doc(db, 'users', user.uid), { character: updatedChar }).catch(console.error);
+          setCharacter(updatedChar);
+        } else {
+          setCharacter(char);
+        }
       }
     });
 
     // Listen to Players List
     const pQuery = query(collection(db, 'users'), limit(100));
     const pUnsub = onSnapshot(pQuery, (snapshot) => {
-      const newPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const newPlayers = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        let char = data.character;
+        
+        // Auto-migrate other players locally for display if needed
+        if (char && char.exp >= char.level * 100) {
+          let currentExp = char.exp;
+          let currentLevel = char.level;
+          let currentStatPoints = char.statPoints || 0;
+          let maxHp = char.max_hp;
+          let maxMp = char.max_mp;
+
+          while (currentExp >= (currentLevel * 100)) {
+            currentExp -= (currentLevel * 100);
+            currentLevel++;
+            currentStatPoints += 2;
+            maxHp += 50;
+            maxMp += 20;
+          }
+
+          const updatedChar = {
+            ...char,
+            exp: currentExp,
+            level: currentLevel,
+            statPoints: currentStatPoints,
+            max_hp: maxHp,
+            max_mp: maxMp,
+            hp: char.hp > maxHp ? maxHp : char.hp,
+            mp: char.mp > maxMp ? maxMp : char.mp
+          };
+
+          // Only update the database if it's the current user's document
+          if (docSnap.id === user.uid) {
+            updateDoc(doc(db, 'users', docSnap.id), { character: updatedChar }).catch(console.error);
+          }
+          
+          return { id: docSnap.id, ...data, character: updatedChar };
+        }
+        
+        return { id: docSnap.id, ...data };
+      });
       setPlayers(newPlayers);
     });
 
@@ -256,14 +330,25 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
     alert('Stats saved!');
   };
 
-  const getLevelAndRank = (exp: number) => {
-    if (exp < 20) return { level: 1, rank: 'F' };
-    if (exp < 120) return { level: 2, rank: 'E' }; // 20 + 100
-    if (exp < 620) return { level: 3, rank: 'D' }; // 120 + 500
-    if (exp < 3120) return { level: 4, rank: 'C' }; // 620 + 2500
-    if (exp < 15620) return { level: 5, rank: 'B' }; // 3120 + 12500
-    if (exp < 78120) return { level: 6, rank: 'A' }; // 15620 + 62500
-    return { level: 7, rank: 'S' };
+  const handleAllocateStat = async (stat: string) => {
+    if (!character || !character.statPoints || character.statPoints <= 0) return;
+
+    const updatedCharacter = {
+      ...character,
+      statPoints: character.statPoints - 1,
+      stats: {
+        ...character.stats,
+        [stat]: character.stats[stat] + 1
+      }
+    };
+
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        character: updatedCharacter
+      });
+    } catch (error) {
+      console.error("Failed to allocate stat", error);
+    }
   };
 
   const handleAction = async (actionText: string) => {
@@ -307,13 +392,22 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
       }
 
       // 2. Update Character Stats
-      const newExp = character.exp + (gmResponse.mekanik.exp_gained || 0);
-      const { level: newLevel, rank: newRank } = getLevelAndRank(newExp);
+      let currentExp = character.exp + (gmResponse.mekanik.exp_gained || 0);
+      let currentLevel = character.level;
+      let currentStatPoints = character.statPoints || 0;
+
+      while (currentExp >= (currentLevel * 100)) {
+        currentExp -= (currentLevel * 100);
+        currentLevel++;
+        currentStatPoints += 2;
+      }
+
+      const newRank = gmResponse.mekanik.new_rank || character.rank;
       
       let maxHp = character.max_hp;
       let maxMp = character.max_mp;
-      if (newLevel > character.level) {
-        const levelDiff = newLevel - character.level;
+      if (currentLevel > character.level) {
+        const levelDiff = currentLevel - character.level;
         maxHp += levelDiff * 50;
         maxMp += levelDiff * 20;
       }
@@ -362,8 +456,9 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
         mp: newMp,
         max_hp: maxHp,
         max_mp: maxMp,
-        level: newLevel,
-        exp: newExp,
+        level: currentLevel,
+        exp: currentExp,
+        statPoints: currentStatPoints,
         gold: newGold,
         location: newLocation,
         rank: newRank,
@@ -381,6 +476,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
       // 3. Save Story Entry
       await addDoc(collection(db, 'stories'), {
+        type: 'personal',
         entry_id: `story_${Date.now()}`,
         tanggal_in_game: `Hari ke-${Math.floor(Date.now() / 86400000) % 365}`,
         author_uid: user.uid,
@@ -395,6 +491,26 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
         pilihan_selanjutnya: gmResponse.pilihan_selanjutnya || [],
         createdAt: serverTimestamp()
       });
+
+      // 3.5 Save Arc Summary to World Story if location changed
+      if (gmResponse.arc_summary) {
+        await addDoc(collection(db, 'stories'), {
+          type: 'world',
+          entry_id: `arc_${Date.now()}`,
+          tanggal_in_game: `Hari ke-${Math.floor(Date.now() / 86400000) % 365}`,
+          author_uid: user.uid,
+          author_username: user.username,
+          display_name: user.display_name,
+          lokasi: character.location, // The previous location
+          judul: `Rangkuman Arc: ${user.display_name} di ${character.location}`,
+          isi_asli_player: "Perjalanan di lokasi ini telah berakhir.",
+          isi_diperkaya_gm: gmResponse.arc_summary,
+          dampak_dunia: "Kisah ini menjadi legenda baru di dunia.",
+          tag: ["Arc Summary", character.location],
+          pilihan_selanjutnya: [],
+          createdAt: serverTimestamp()
+        });
+      }
 
       // 4. Update World State if needed
       if (gmResponse.mekanik.updated_quests || gmResponse.mekanik.updated_merchant_stock) {
@@ -468,7 +584,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
         {activeCombat && (
           <div className="absolute top-0 left-0 w-full bg-zinc-950/90 border-b border-red-900/50 p-4 z-30 animate-in slide-in-from-top">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-red-400 text-lg">{activeCombat.enemyName}</h3>
+              <h3 className="font-bold text-red-400 text-lg">{activeCombat.enemyName} <span className="text-xs bg-red-900/50 px-2 py-0.5 rounded">Rank {activeCombat.enemyRank}</span></h3>
               <span className="text-xs text-zinc-500 uppercase font-bold">Combat Active</span>
             </div>
             <div className="flex items-center gap-4">
@@ -495,14 +611,28 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
 
         {/* STORY TAB */}
         <div className={`absolute inset-0 flex flex-col ${activeTab === 'story' ? 'z-10 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
+          <div className="flex justify-center gap-4 p-4 bg-zinc-950/80 backdrop-blur-sm border-b border-zinc-900 z-20">
+            <button 
+              onClick={() => setStoryTab('personal')} 
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${storyTab === 'personal' ? 'bg-amber-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}`}
+            >
+              Cerita Karakter
+            </button>
+            <button 
+              onClick={() => setStoryTab('world')} 
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${storyTab === 'world' ? 'bg-amber-600 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'}`}
+            >
+              Cerita Dunia
+            </button>
+          </div>
           <div className="flex-1 overflow-y-auto p-4 pb-32 space-y-6 scroll-smooth">
-            {stories.length === 0 ? (
+            {stories.filter(story => storyTab === 'personal' ? (story.type !== 'world' && story.author_uid === user.uid) : story.type === 'world').length === 0 ? (
               <div className="text-center text-zinc-500 italic mt-20">The chronicles are empty. Begin your journey...</div>
             ) : (
-              stories.map((story) => (
+              stories.filter(story => storyTab === 'personal' ? (story.type !== 'world' && story.author_uid === user.uid) : story.type === 'world').map((story) => (
                 <div key={story.id} className={`flex flex-col max-w-3xl ${story.author_uid === user.uid ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="font-bold text-amber-500 text-sm">{story.display_name}</span>
+                    <span className="font-bold text-amber-500 text-sm">{story.display_name || story.author_username || 'Unknown'}</span>
                     <span className="text-xs text-zinc-500">@ {story.lokasi}</span>
                   </div>
                   <div className={`p-4 rounded-xl text-sm leading-relaxed ${story.author_uid === user.uid ? 'bg-zinc-900 border border-zinc-800 text-zinc-300' : 'bg-zinc-900/50 border border-zinc-800/50 text-zinc-400'}`}>
@@ -521,42 +651,44 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
           </div>
 
           {/* Input Area */}
-          <div className="absolute bottom-0 w-full bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pt-10 pb-4 px-4">
-            <div className="max-w-4xl mx-auto">
-              {apiKeyMissing && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-3 rounded-lg mb-4 flex items-center gap-3">
-                  <Info size={16} className="shrink-0" />
-                  <div>
-                    <p className="font-bold">Game Master Offline</p>
-                    <p className="opacity-80">Gemini API Key is missing. Please set GEMINI_API_KEY in Settings to enable the Game Master.</p>
+          {storyTab === 'personal' && (
+            <div className="w-full bg-gradient-to-t from-zinc-950 via-zinc-950 to-transparent pt-10 pb-4 px-4">
+              <div className="max-w-4xl mx-auto">
+                {apiKeyMissing && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-xs p-3 rounded-lg mb-4 flex items-center gap-3">
+                    <Info size={16} className="shrink-0" />
+                    <div>
+                      <p className="font-bold">Game Master Offline</p>
+                      <p className="opacity-80">Gemini API Key is missing. Please set GEMINI_API_KEY in Settings to enable the Game Master.</p>
+                    </div>
                   </div>
-                </div>
-              )}
-              {stories.length > 0 && stories[stories.length - 1].author_uid === user.uid && stories[stories.length - 1].pilihan_selanjutnya?.length > 0 && (
-                <div className="flex overflow-x-auto pb-2 mb-2 gap-2 scrollbar-hide">
-                  {stories[stories.length - 1].pilihan_selanjutnya.map((opt: string, i: number) => (
-                    <button 
-                      key={i} onClick={() => handleAction(opt)} disabled={loading}
-                      className="whitespace-nowrap text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-2 rounded-full transition-colors disabled:opacity-50"
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={(e) => { e.preventDefault(); handleAction(input); }} className="flex gap-2">
-                <input
-                  type="text" value={input} onChange={(e) => setInput(e.target.value)}
-                  placeholder="What do you do next?"
-                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-amber-500 text-zinc-100 placeholder-zinc-500"
-                  disabled={loading}
-                />
-                <button type="submit" disabled={loading || !input.trim()} className="bg-amber-600 hover:bg-amber-500 text-white px-6 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 min-h-[56px] min-w-[56px]">
-                  {loading ? <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={24} />}
-                </button>
-              </form>
+                )}
+                {stories.length > 0 && stories[stories.length - 1].author_uid === user.uid && stories[stories.length - 1].pilihan_selanjutnya?.length > 0 && (
+                  <div className="flex overflow-x-auto pb-2 mb-2 gap-2 scrollbar-hide">
+                    {stories[stories.length - 1].pilihan_selanjutnya.map((opt: string, i: number) => (
+                      <button 
+                        key={i} onClick={() => handleAction(opt)} disabled={loading}
+                        className="whitespace-nowrap text-xs bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-2 rounded-full transition-colors disabled:opacity-50"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <form onSubmit={(e) => { e.preventDefault(); handleAction(input); }} className="flex gap-2">
+                  <input
+                    type="text" value={input} onChange={(e) => setInput(e.target.value)}
+                    placeholder="What do you do next?"
+                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-4 text-base focus:outline-none focus:border-amber-500 text-zinc-100 placeholder-zinc-500"
+                    disabled={loading}
+                  />
+                  <button type="submit" disabled={loading || !input.trim()} className="bg-amber-600 hover:bg-amber-500 text-white px-6 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 min-h-[56px] min-w-[56px]">
+                    {loading ? <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={24} />}
+                  </button>
+                </form>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* MAP TAB */}
@@ -602,7 +734,7 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                     </div>
                     <div>
                       <h3 className="font-bold text-zinc-100 flex items-center gap-2 text-base">
-                        {p.display_name} 
+                        {p.display_name || p.username || 'Unknown'} 
                         {p.id === user.uid && <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">You</span>}
                       </h3>
                       <p className="text-sm text-zinc-400">Lvl {p.character?.level || 1} • {p.character?.title || 'Novice'}</p>
@@ -680,19 +812,36 @@ export default function Game({ user, onLogout }: { user: any, onLogout: () => vo
                   <div className="h-2 bg-zinc-950 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{ width: `${(character.mp / character.max_mp) * 100}%` }}></div></div>
                 </div>
                 <div>
-                  <div className="flex justify-between text-xs mb-1"><span className="text-amber-400 flex items-center gap-1"><Star size={12}/> EXP</span><span>{character.exp}</span></div>
-                  <div className="h-1 bg-zinc-950 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all" style={{ width: `${(character.exp % 1000) / 10}%` }}></div></div>
+                  <div className="flex justify-between text-xs mb-1"><span className="text-amber-400 flex items-center gap-1"><Star size={12}/> EXP</span><span>{character.exp} / {character.level * 100}</span></div>
+                  <div className="h-1 bg-zinc-950 rounded-full overflow-hidden"><div className="h-full bg-amber-500 transition-all" style={{ width: `${Math.min(100, (character.exp / (character.level * 100)) * 100)}%` }}></div></div>
                 </div>
               </div>
 
               {/* Stats */}
               <div>
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Attributes</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Attributes</h3>
+                  {character.statPoints > 0 && (
+                    <span className="text-xs font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-full border border-amber-500/20">
+                      {character.statPoints} Points Available
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {['str', 'agi', 'int', 'def', 'luck'].map(stat => (
                     <div key={stat} className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex justify-between items-center">
                       <span className="text-zinc-500 uppercase text-xs font-bold">{stat}</span>
-                      <span className="font-mono text-zinc-200">{character.stats[stat]}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-zinc-200">{character.stats[stat]}</span>
+                        {character.statPoints > 0 && (
+                          <button 
+                            onClick={() => handleAllocateStat(stat)}
+                            className="w-5 h-5 bg-amber-600 hover:bg-amber-500 text-white rounded flex items-center justify-center font-bold leading-none"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

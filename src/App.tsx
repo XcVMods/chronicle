@@ -10,6 +10,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import Auth from './components/Auth';
 import CharacterCreation from './components/CharacterCreation';
 import Game from './components/Game';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
@@ -52,13 +53,25 @@ export default function App() {
   }
 
   if (!user) {
-    return <Auth onLogin={setUser} />;
+    return (
+      <ErrorBoundary>
+        <Auth onLogin={setUser} />
+      </ErrorBoundary>
+    );
   }
 
   if (user.needsCharacter || !user.character) {
-    return <CharacterCreation user={user} onComplete={setUser} />;
+    return (
+      <ErrorBoundary>
+        <CharacterCreation user={user} onComplete={setUser} />
+      </ErrorBoundary>
+    );
   }
 
-  return <Game user={user} onLogout={handleLogout} />;
+  return (
+    <ErrorBoundary>
+      <Game user={user} onLogout={handleLogout} />
+    </ErrorBoundary>
+  );
 }
 

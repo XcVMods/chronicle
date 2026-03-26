@@ -79,12 +79,12 @@ ${truncatedRecentStories}
 "${playerAction}"
 
 ### Instructions:
-1. Validate the action based on the player's stats, level, element, rank, and title.
+1. Validate the action based on the player's stats (str, agi, int, def, luck), level, element, rank, and title. **CRITICAL: Attributes (stats) heavily influence the outcome of actions, combat, and interactions. A player with high STR can lift heavy objects or deal massive physical damage, high AGI allows dodging and fast attacks, high INT improves magic and puzzle-solving, high DEF reduces damage taken, and high LUCK increases critical hits and rare item finds.**
 2. **CRITICAL COMBAT LOGIC**: If the player is fighting or dueling, you MUST explicitly calculate and mention Class and Elemental advantages/disadvantages. 
    - Element Counters: Fire beats Wind/Nature. Water beats Fire/Earth. Wind beats Earth/Lightning. Earth beats Lightning/Fire. Lightning beats Water/Ice. Nature beats Water/Lightning. Ice beats Wind/Nature. Light and Dark counter each other.
    - Class Counters: Warriors beat Assassins/Archers. Mages beat Warriors/Paladins. Assassins beat Mages/Clerics. Paladins beat Assassins/Necromancers. Archers beat Mages/Necromancers. Necromancers beat Warriors/Archers. Clerics beat Necromancers/Mages.
    - If the player has an advantage, they deal more damage and take less. If they have a disadvantage, they struggle unless they use a clever strategy.
-3. Enrich the narrative with sensory details and lore. Use the \`current_location_lore\` and \`current_location_atmosphere\` from the World State to describe the environment vividly.
+3. Enrich the narrative with sensory details and lore. Use the \`current_location_lore\` and \`current_location_atmosphere\` from the World State to describe the environment vividly. Incorporate how the player's specific attributes helped or hindered them.
 4. Determine mechanical consequences (HP/MP changes, EXP gained, items found, stat checks).
 5. **Guilds & Economy**:
    - If the player interacts with the Adventurer's Guild (e.g., taking a quest), provide appropriate EXP and Gold rewards upon completion. You may also update the quest board by providing \`updated_quests\`.
@@ -111,7 +111,8 @@ ${truncatedRecentStories}
 7. Describe how the world or other players might react.
 8. Provide 3-4 options for the player's next move.
 9. If the player achieves something great, you can award a new Title or upgrade their Rank (F, E, D, C, B, A, S).
-10. **LANGUAGE**: Remember to write narrative, world reaction, and next options in Bahasa Indonesia, but keep RPG terms in English.
+10. **ARC SUMMARY**: If the player changes location (i.e., they leave their current location and go to a new one), you MUST provide an \`arc_summary\` summarizing their entire adventure in the previous location. This will be published to the World Story. If they do not change location, leave \`arc_summary\` empty.
+11. **LANGUAGE**: Remember to write narrative, world reaction, next options, and arc summary in Bahasa Indonesia, but keep RPG terms in English.
 `;
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -281,11 +282,12 @@ ${truncatedRecentStories}
                     description: "If in combat, provide enemy status.",
                     properties: {
                       enemyName: { type: Type.STRING },
+                      enemyRank: { type: Type.STRING, description: "Enemy rank: F, E, D, C, B, A, S" },
                       enemyHp: { type: Type.NUMBER },
                       enemyMaxHp: { type: Type.NUMBER },
                       statusEffects: { type: Type.ARRAY, items: { type: Type.STRING } }
                     },
-                    required: ["enemyName", "enemyHp", "enemyMaxHp"]
+                    required: ["enemyName", "enemyRank", "enemyHp", "enemyMaxHp"]
                   },
                   interaction_request: {
                     type: Type.OBJECT,
@@ -304,7 +306,8 @@ ${truncatedRecentStories}
               },
               dunia_bereaksi: { type: Type.STRING, description: "How the world or nearby entities react to this action." },
               pilihan_selanjutnya: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-4 options for the player's next move." },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant tags for this story entry (e.g., location, NPCs involved, event name)." }
+              tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Relevant tags for this story entry (e.g., location, NPCs involved, event name)." },
+              arc_summary: { type: Type.STRING, description: "If the player changes location (location_change is not empty), provide a summary of their entire adventure in the previous location to be published to the World Story. Otherwise, leave it empty." }
             },
             required: ["narasi", "mekanik", "dunia_bereaksi", "pilihan_selanjutnya", "tags"]
           }
@@ -330,7 +333,7 @@ ${truncatedRecentStories}
         retries--;
         if (retries === 0) {
           console.error("Game Master Error (Rate Limit):", error);
-          throw new Error("Sistem sedang sibuk karena terlalu banyak permintaan. Silakan coba lagi dalam beberapa saat.");
+          throw new Error("Batas kuota API Gemini telah tercapai. Silakan periksa penggunaan kuota dan detail penagihan Anda di https://aistudio.google.com/ atau tunggu beberapa saat hingga kuota direset.");
         }
         console.warn(`Rate limit tercapai. Mencoba lagi dalam ${backoff}ms...`);
         await delay(backoff);

@@ -73,7 +73,8 @@ export default function CharacterCreation({ user, onComplete }: { user: any, onC
       location: 'Kerajaan Oakhaven',
       rank: 'F',
       title: 'Novice',
-      titles: [{ name: 'Novice', effect: 'None' }]
+      titles: [{ name: 'Novice', effect: 'None' }],
+      statPoints: 0
     };
 
     const newUserDoc: any = {
@@ -85,9 +86,7 @@ export default function CharacterCreation({ user, onComplete }: { user: any, onC
       online: true
     };
 
-    if (user.createdAt) {
-      newUserDoc.createdAt = user.createdAt;
-    } else {
+    if (!user.createdAt) {
       newUserDoc.createdAt = serverTimestamp();
     }
 
